@@ -52,8 +52,11 @@ void GSRender::on_exit()
 	}
 }
 
-void GSRender::flip(const rsx::display_flip_info_t&)
+void GSRender::flip(const rsx::display_flip_info_t& info)
 {
+	// Clears the pending emu flip request; without this, renderers without their own flip (Null) re-flip forever
+	rsx::thread::flip(info);
+
 	if (m_frame)
 	{
 		m_frame->flip(m_context);
