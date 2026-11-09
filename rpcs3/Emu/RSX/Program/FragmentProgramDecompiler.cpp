@@ -966,8 +966,39 @@ std::string FragmentProgramDecompiler::BuildCode()
 	"#define _builtin_sqrt(x) sqrt(abs(x))\n"
 	"#define _builtin_rcp(x) (1. / x)\n"
 	"#define _builtin_rsq(x) (1. / _builtin_sqrt(x))\n"
-	"#define _builtin_div(x, y) (x / y)\n"
 	"#define _builtin_lerp mix\n";
+
+	{
+		// Define RSX-compliant DIV (same rule as DIVSQ below)
+		// If the numerator is 0, the result is always 0 even if the denominator is 0.
+		// A plain IEEE divide turns 0/0 into NaN, which then poisons HDR targets (black/white sparkles on
+		// surfaces whose textures contain pure black texels, e.g. DUST 514 ground decals).
+		std::string div_func =
+			"$float4 _builtin_div($float4 a, float b)\n"
+			"{\n"
+			"	$float4 tmp = a / b;\n"
+			"	$float4 choice = abs(a);\n";
+
+		if (glsl)
+		{
+			div_func +=
+				"	return _select(a, tmp, greaterThan(choice, vec4(0.)));\n";
+		}
+		else
+		{
+			div_func +=
+				"	if (choice.x > 0.) a.x = tmp.x;\n"
+				"	if (choice.y > 0.) a.y = tmp.y;\n"
+				"	if (choice.z > 0.) a.z = tmp.z;\n"
+				"	if (choice.w > 0.) a.w = tmp.w;\n"
+				"	return a;\n";
+		}
+
+		div_func +=
+			"}\n\n";
+
+		OS << Format(div_func);
+	}
 
 	if (device_props.has_low_precision_rounding)
 	{
