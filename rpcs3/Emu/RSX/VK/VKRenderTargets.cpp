@@ -504,6 +504,19 @@ namespace vk
 		surface->push_layout(cmd, optimal_layout);
 
 		VkImageSubresourceRange range{ surface->aspect(), 0, 1, 0, 1 };
+
+		// In GENERAL layout (feedback-loop surfaces without VK_EXT_attachment_feedback_loop_layout) push/pop_layout
+		// are no-ops and emit no barrier. The transfer clear then races with earlier and later draws that write or
+		// sample this surface (stale pre-clear data or a late clear shows through, e.g. DUST 514 floor flicker).
+		const bool needs_explicit_barriers = (surface->current_layout == VK_IMAGE_LAYOUT_GENERAL);
+		if (needs_explicit_barriers)
+		{
+			vk::insert_image_memory_barrier(cmd, surface->value, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+				range);
+		}
+
 		if (surface->aspect() & VK_IMAGE_ASPECT_COLOR_BIT)
 		{
 			VkClearColorValue color = { {0.f, 0.f, 0.f, 1.f} };
@@ -513,6 +526,14 @@ namespace vk
 		{
 			VkClearDepthStencilValue clear{ 1.f, 255 };
 			vkCmdClearDepthStencilImage(cmd, surface->value, surface->current_layout, &clear, 1, &range);
+		}
+
+		if (needs_explicit_barriers)
+		{
+			vk::insert_image_memory_barrier(cmd, surface->value, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+				range);
 		}
 
 		surface->pop_layout(cmd);
