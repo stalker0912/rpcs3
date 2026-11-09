@@ -70,7 +70,11 @@ namespace vk
 			ensure(sampler_state->upload_context == rsx::texture_upload_context::framebuffer_storage);
 			if (sampler_state->is_cyclic_reference) [[ unlikely ]]
 			{
-				// Nothing to do
+				// The surface is sampled while bound as a render target. A cached descriptor reuses the view without
+				// going through upload_texture, so no barrier was emitted for this draw. Earlier draws in the same
+				// renderpass may have written the texels we are about to read (e.g. DUST 514 roads/decals blending
+				// against the terrain underneath). Order those writes before our reads.
+				vk::as_rtt(raw)->texture_barrier(cmd);
 				break;
 			}
 
